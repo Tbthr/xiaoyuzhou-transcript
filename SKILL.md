@@ -12,29 +12,39 @@ description: >
 
 从小宇宙获取播客逐字稿并上传到 IMA 知识库。
 
-## 工作流程
+## 工作流程（AI 编排）
 
 ```
-播客主页 → 解析 episode_id → 提取有知有行逐字稿链接
-    → defuddle.md / r.jina.ai 获取内容
-    → 上传到 IMA 知识库（通过 ima-skill）
-    → 更新本地 episode_id 记录
+用户触发 skill（手动或 cron）
+    ↓
+AI 读取 SKILL.md 了解播客解析流程
+    ↓
+AI 解析播客主页 → 获取 episode_id 列表
+    ↓
+对于每个需要处理的 episode:
+    → AI 调用 markdown-proxy skill 获取逐字稿 URL 内容
+    → AI 处理内容（移除图片、清理格式）
+    → AI 调用 ima-skill 上传到知识库
+    ↓
+AI 更新状态文件 ~/xiaoyuzhou-transcript/state.json
 ```
+
+**关键**：URL 获取由 AI 调用 markdown-proxy skill，脚本只做解析和状态管理。
 
 ## 核心脚本
 
 ### `scripts/fetch_transcript.py`
 
-获取单期或全部节目逐字稿：
+解析播客主页，返回 episode 列表（不做网络获取）：
 
 ```bash
-python3 scripts/fetch_transcript.py <episode_url> [--output-dir <dir>]
-python3 scripts/fetch_transcript.py <podcast_url> --all [--output-dir <dir>]
+python3 scripts/fetch_transcript.py <podcast_url> --list
+# 输出: [(episode_id, title), ...] JSON
 ```
 
 ### `scripts/sync.py`
 
-增量同步脚本，对比本地记录与最新节目，只上传新增期：
+状态管理脚本，对比本地记录与最新节目，只处理新增期：
 
 ```bash
 python3 scripts/sync.py
@@ -42,10 +52,23 @@ python3 scripts/sync.py
 
 依赖配置目录 `~/xiaoyuzhou-transcript/`（见 README.md）。
 
+## AI 编排示例
+
+当用户说 "获取这个播客的逐字稿" 时：
+
+1. AI 运行 `fetch_transcript.py --list` 获取 episode 列表
+2. 对于每个 episode，AI 调用 markdown-proxy skill：
+   ```
+   bash ~/.claude/skills/qiaomu-markdown-proxy/scripts/fetch.sh "https://youzhiyouxing.cn/n/materials/{id}"
+   ```
+3. AI 清理内容（移除图片 `![]...`、合并空行）
+4. AI 调用 ima-skill 上传
+5. AI 更新 `~/xiaoyuzhou-transcript/state.json`
+
 ## 前置依赖
 
-- **`ima-skill`** — 提供 COS 上传脚本 `cos-upload.cjs`
-- **`defuddle`** 或 **`markdown-proxy`** — 网页内容抓取
+- **`ima-skill`** — 提供 COS 上传脚本和 IMA API 调用
+- **`markdown-proxy`** — AI 调用此 skill 获取 URL 内容（不是脚本直接调用）
 
 ## 参考资料
 

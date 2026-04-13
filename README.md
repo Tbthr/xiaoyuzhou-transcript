@@ -6,8 +6,24 @@
 
 安装本 skill 前需先安装：
 
-- **`ima-skill`** — 提供 `cos-upload.cjs`
-- **`defuddle`** 或 **`markdown-proxy`** — 网页内容抓取
+- **`ima-skill`** — 提供 COS 上传脚本和 IMA API 调用
+- **`markdown-proxy`** — AI 调用此 skill 获取 URL 内容
+
+## 工作流
+
+```
+用户触发 skill（手动或 cron）
+    ↓
+AI 解析播客主页 → 获取 episode_id 列表
+    ↓
+对于每个需要处理的 episode:
+    → AI 调用 markdown-proxy skill 获取逐字稿
+    → AI 处理内容并上传到 IMA
+    ↓
+AI 更新状态文件 ~/xiaoyuzhou-transcript/state.json
+```
+
+**注意**：URL 获取由 AI 调用 markdown-proxy skill，脚本只做解析和状态管理。
 
 ## 配置目录
 
@@ -39,17 +55,35 @@
 
 从 `~/.config/ima/client_id` 和 `~/.config/ima/api_key` 读取。
 
+## AI 编排模式
+
+当用户说 "获取逐字稿" 时，AI 会：
+
+1. 运行 `scripts/fetch_transcript.py --list` 获取 episode 列表
+2. 对每个 episode，调用 markdown-proxy skill 获取内容：
+   ```bash
+   bash ~/.claude/skills/qiaomu-markdown-proxy/scripts/fetch.sh "https://youzhiyouxing.cn/n/materials/{id}"
+   ```
+3. AI 清理内容（移除图片、合并空行）
+4. AI 调用 ima-skill 上传到 IMA
+5. AI 更新 `~/xiaoyuzhou-transcript/state.json`
+
 ## 手动运行
 
+### 解析播客（供 AI 调用 markdown-proxy）
+
 ```bash
-# 增量同步
-python3 scripts/sync.py
+# 列出 episode（不获取内容）
+python3 scripts/fetch_transcript.py <podcast_url> --list
 
-# 单期节目
+# 单期解析
 python3 scripts/fetch_transcript.py https://www.xiaoyuzhoufm.com/episode/xxx
+```
 
-# 全部节目（播客主页）
-python3 scripts/fetch_transcript.py https://www.xiaoyuzhoufm.com/podcast/xxx --all
+### 增量同步
+
+```bash
+python3 scripts/sync.py
 ```
 
 ## 定时任务
@@ -57,6 +91,7 @@ python3 scripts/fetch_transcript.py https://www.xiaoyuzhoufm.com/podcast/xxx --a
 - cron expression: `0 9 * * 6`（每周六 09:00 Asia/Shanghai）
 - cron id: `b0d3f7f7-56e5-4f86-811a-1eab40f2898c`
 - OpenClaw 自动 announce 结果到飞书
+- cron 触发时 AI 也参与编排
 
 手动触发：
 ```bash

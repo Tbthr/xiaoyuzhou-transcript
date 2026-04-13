@@ -2,19 +2,22 @@
 """
 小宇宙播客逐字稿 → IMA 知识库同步脚本
 - 对比本地记录的 latest_episode_id 与小宇宙页面最新 episode ID
-- 若有更新，抓取新节目的逐字稿直接上传 IMA 知识库
-- 不在本地存储 .md 文件
-- 上传完成后更新本地记录的 latest_episode_id
+- 若有更新，标记新节目供 AI 调用 markdown-proxy 获取逐字稿
+- 更新完成后更新本地记录的 latest_episode_id
+- URL 获取由 AI 调用 markdown-proxy skill 负责
 """
 
 import re, os, sys, json, time, subprocess, tempfile
 
 # ---- 配置 ----
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKILL_SCRIPT = os.path.join(SKILL_DIR, "scripts", "fetch_transcript.py")
 COS_UPLOAD_SCRIPT = os.path.expanduser("~/.openclaw/skills/ima/scripts/cos-upload.cjs")
 SUBSCRIPTIONS_PATH = os.path.expanduser("~/xiaoyuzhou-transcript/subscriptions.json")
 STATE_PATH = os.path.expanduser("~/xiaoyuzhou-transcript/state.json")
+
+# 导入解析函数（fetch_transcript.py 只做解析，不做网络获取）
+sys.path.insert(0, os.path.join(SKILL_DIR, "scripts"))
+from fetch_transcript import parse_podcast_page
 
 # IMA 凭证
 def load_ima_creds():
@@ -120,127 +123,6 @@ def upload_to_ima(kb_id, content, file_name, client_id, api_key):
     return True, media_id
 
 
-# ---- 小宇宙解析 ----
-
-def parse_podcast_page(podcast_url):
-    """解析播客主页，返回 [(episode_id, title), ...]，按最新排序。"""
-    result = subprocess.run(
-        ["curl", "-sL", podcast_url,
-         "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
-        capture_output=True, text=True, timeout=15
-    ).stdout
-
-    html_ids = re.findall(r'href="/episode/([a-f0-9]+)"', result)
-    seen_ids = []
-    for eid in html_ids:
-        if eid not in seen_ids:
-            seen_ids.append(eid)
-
-    match = re.search(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', result, re.DOTALL)
-    json_titles = []
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            for ex in data.get('workExample', []):
-                name = ex.get('name', '')
-                if name:
-                    json_titles.append(name)
-        except:
-            pass
-
-    episodes = []
-    for i, title in enumerate(json_titles):
-        if i < len(seen_ids):
-            episodes.append((seen_ids[i], title))
-    return episodes
-
-
-def fetch_transcript(episode_id):
-    """获取单期逐字稿内容。返回 (content, source_url, is_full)。"""
-    xiaoyuzhou_url = f"https://www.xiaoyuzhoufm.com/episode/{episode_id}"
-    page = subprocess.run(
-        ["curl", "-sL", xiaoyuzhou_url,
-         "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
-        capture_output=True, text=True, timeout=15
-    ).stdout
-
-    mat_ids = set(re.findall(r'youzhiyouxing\.cn/(?:n/)?materials/(\d+)', page))
-    mat_ids.discard('1037')
-
-    if mat_ids:
-        mid = sorted(mat_ids)[-1]
-        yz_url = f"https://youzhiyouxing.cn/n/materials/{mid}"
-        content = fetch_url(yz_url)
-        if content:
-            return content, yz_url, True
-
-    content = fetch_url(xiaoyuzhou_url)
-    if content:
-        return content, xiaoyuzhou_url, False
-    return "", "", False
-
-
-def fetch_url(url):
-    """通过 markdown-proxy 级联获取内容（返回 Markdown）。"""
-    # 优先 defuddle.md
-    try:
-        r = subprocess.run(
-            ["curl", "-sL", f"https://defuddle.md/{url}",
-             "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
-            capture_output=True, text=True, timeout=30
-        )
-        content = clean_defuddle(r.stdout)
-        if len(content) > 500:
-            return content
-    except:
-        pass
-
-    time.sleep(1)
-
-    # 备用 r.jina.ai
-    try:
-        r = subprocess.run(
-            ["curl", "-sL", f"https://r.jina.ai/{url}",
-             "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-             "-H", "Accept: text/markdown"],
-            capture_output=True, text=True, timeout=30
-        )
-        content = clean_jina(r.stdout)
-        if len(content) > 500:
-            return content
-    except:
-        pass
-    return ""
-
-
-def clean_jina(raw):
-    lines = raw.split('\n')
-    start = 0
-    for i, line in enumerate(lines):
-        if line.strip() == 'Markdown Content:':
-            start = i + 2
-            break
-    if start == 0:
-        for i, line in enumerate(lines):
-            if line.startswith('# ') and i > 2:
-                start = i
-                break
-    content = '\n'.join(lines[start:])
-    content = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', content)
-    content = re.sub(r'\n{3,}', '\n\n', content)
-    return content.strip()
-
-
-def clean_defuddle(raw):
-    if raw.startswith('---'):
-        end = raw.find('---', 3)
-        if end > 0:
-            raw = raw[end+3:].strip()
-    raw = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', raw)
-    raw = re.sub(r'\n{3,}', '\n\n', raw)
-    return raw.strip()
-
-
 # ---- 主流程 ----
 
 def load_subscriptions():
@@ -314,42 +196,25 @@ def main():
         last_idx = next((i for i, (eid, _) in enumerate(episodes) if eid == last_recorded_id), len(episodes))
         new_episodes = episodes[:last_idx]
 
-        print(f"  新增 {len(new_episodes)} 期，开始上传 IMA...")
+        print(f"  新增 {len(new_episodes)} 期")
+        print("  （内容获取由 AI 调用 markdown-proxy skill 负责）")
 
-        uploaded = []
-        for i, (eid, title) in enumerate(new_episodes):
-            print(f"  [{i+1}/{len(new_episodes)}] {title[:40]}...")
-
-            content, source_url, is_full = fetch_transcript(eid)
-
-            if not content or len(content) < 500:
-                print(f"    ⚠️ 逐字稿获取失败")
-                time.sleep(2)
-                continue
-
-            safe_name = re.sub(r'[|／/:*?"<>\\]', '', title).strip()[:80] + ".md"
-
-            ok, msg = upload_to_ima(kb_id, content, safe_name, client_id, api_key)
-
-            if ok:
-                uploaded.append(eid)
-                print(f"    ✅ media_id: {msg}")
-            else:
-                print(f"    ❌ {msg}")
-
-            time.sleep(2)
+        # 标记新 episode 供 AI 获取（不做实际获取）
+        # AI 会通过 markdown-proxy 获取每个 episode 的逐字稿内容并上传 IMA
 
         state[name] = {
             "latest_episode_id": latest_id,
             "latest_episode_title": latest_title,
-            "last_check": time.strftime("%Y-%m-%d %H:%M:%S")
+            "last_check": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "pending_episodes": [{"id": eid, "title": title} for eid, title in new_episodes]
         }
 
         all_results.append({
             "name": name,
             "status": "OK",
-            "new_count": len(uploaded),
-            "latest_title": latest_title
+            "new_count": len(new_episodes),
+            "latest_title": latest_title,
+            "pending_episodes": new_episodes
         })
 
     save_state(state)
@@ -359,7 +224,7 @@ def main():
     has_update = False
     for r in all_results:
         if r["status"] == "OK" and r["new_count"] > 0:
-            print(f"  ✅ {r['name']}: 新增 {r['new_count']} 期 → 已上传 IMA")
+            print(f"  ✅ {r['name']}: 新增 {r['new_count']} 期 → AI 将获取逐字稿并上传 IMA")
             has_update = True
         elif r["status"] == "NO_NEW":
             print(f"  ➖ {r['name']}: 无更新")
