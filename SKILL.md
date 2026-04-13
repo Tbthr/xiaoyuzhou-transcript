@@ -57,10 +57,9 @@ python3 scripts/sync.py
 当用户说 "获取这个播客的逐字稿" 时：
 
 1. AI 运行 `fetch_transcript.py --list` 获取 episode 列表
-2. 对于每个 episode，AI 调用 markdown-proxy skill：
-   ```
-   bash ~/.claude/skills/qiaomu-markdown-proxy/scripts/fetch.sh "https://youzhiyouxing.cn/n/materials/{id}"
-   ```
+2. 对于每个 episode，AI 读取 `markdown-proxy` SKILL.md，按其描述的工作流获取内容：
+   - 优先：`curl -sL "https://r.jina.ai/{url}"`
+   - 备用：`curl -sL "https://defuddle.md/{url}"`
 3. AI 清理内容（移除图片 `![]...`、合并空行）
 4. AI 调用 ima-skill 上传
 5. AI 更新 `~/xiaoyuzhou-transcript/state.json`
