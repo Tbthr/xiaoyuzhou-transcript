@@ -2,6 +2,13 @@
 
 小宇宙播客逐字稿抓取 + IMA 知识库同步。
 
+## 前置依赖
+
+安装本 skill 前需先安装以下依赖：
+
+- **`ima-skill`** — IMA 知识库上传（提供 `cos-upload.cjs`）
+- **`markdown-proxy`** 或 **`defuddle`** — URL → Markdown 内容获取
+
 ## 配置
 
 ### 订阅列表
