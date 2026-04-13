@@ -12,41 +12,43 @@ description: >
 
 从小宇宙获取播客逐字稿并上传到 IMA 知识库。
 
-## 脚本说明
+## 工作流程
+
+```
+播客主页 → 解析 episode_id → 提取有知有行逐字稿链接
+    → defuddle.md / r.jina.ai 获取内容
+    → 上传到 IMA 知识库（通过 ima-skill）
+    → 更新本地 episode_id 记录
+```
+
+## 核心脚本
 
 ### `scripts/fetch_transcript.py`
 
 获取单期或全部节目逐字稿：
 
 ```bash
-# 单期
 python3 scripts/fetch_transcript.py <episode_url> [--output-dir <dir>]
-
-# 全部（播客主页）
 python3 scripts/fetch_transcript.py <podcast_url> --all [--output-dir <dir>]
 ```
 
 ### `scripts/sync.py`
 
-增量同步脚本，对比本地记录的 latest_episode_id 与小宇宙最新节目，只上传新增期：
+增量同步脚本，对比本地记录与最新节目，只上传新增期：
 
 ```bash
 python3 scripts/sync.py
 ```
 
-依赖 `~/.openclaw/workspace-content/xiaoyuzhou_subscriptions.json` 配置订阅列表。
+依赖配置目录 `~/xiaoyuzhou-transcript/`（见 README.md）。
 
-## 定时任务
+## 前置依赖
 
-每周六 09:00（Asia/Shanghai），cron id：`b0d3f7f7-56e5-4f86-811a-1eab40f2898c`
-
-## 依赖 Skills
-
-- `markdown-proxy` 或 `defuddle` — URL → Markdown 内容获取
-- `ima-skill` — IMA 知识库上传（需要 cos-upload.cjs）
+- **`ima-skill`** — 提供 COS 上传脚本 `cos-upload.cjs`
+- **`defuddle`** 或 **`markdown-proxy`** — 网页内容抓取
 
 ## 参考资料
 
-- `references/podcast_sources.md` — 播客源说明和 URL 格式
-- `references/transcript_flow.md` — 详细抓取流程和降级策略
-- `README.md` — 配置说明（订阅列表格式、状态文件路径）
+- `references/podcast_sources.md` — 播客源 URL 格式说明
+- `references/transcript_flow.md` — 详细抓取流程
+- `README.md` — 配置说明、定时任务设置

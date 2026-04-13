@@ -13,8 +13,8 @@ import re, os, sys, json, time, subprocess, tempfile
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILL_SCRIPT = os.path.join(SKILL_DIR, "scripts", "fetch_transcript.py")
 COS_UPLOAD_SCRIPT = os.path.expanduser("~/.openclaw/skills/ima/scripts/cos-upload.cjs")
-SUBSCRIPTIONS_PATH = os.path.expanduser("~/.openclaw/workspace-content/xiaoyuzhou_subscriptions.json")
-STATE_PATH = os.path.expanduser("~/.openclaw/workspace-content/xiaoyuzhou_sync/last_check.json")
+SUBSCRIPTIONS_PATH = os.path.expanduser("~/xiaoyuzhou-transcript/subscriptions.json")
+STATE_PATH = os.path.expanduser("~/xiaoyuzhou-transcript/state.json")
 
 # IMA 凭证
 def load_ima_creds():

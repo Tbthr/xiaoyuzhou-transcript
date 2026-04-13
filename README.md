@@ -4,16 +4,22 @@
 
 ## 前置依赖
 
-安装本 skill 前需先安装以下依赖：
+安装本 skill 前需先安装：
 
-- **`ima-skill`** — IMA 知识库上传（提供 `cos-upload.cjs`）
-- **`markdown-proxy`** 或 **`defuddle`** — URL → Markdown 内容获取
+- **`ima-skill`** — 提供 `cos-upload.cjs`
+- **`defuddle`** 或 **`markdown-proxy`** — 网页内容抓取
 
-## 配置
+## 配置目录
 
-### 订阅列表
+所有配置文件统一放在 `~/xiaoyuzhou-transcript/`：
 
-文件路径：`~/.openclaw/workspace-content/xiaoyuzhou_subscriptions.json`
+```
+~/xiaoyuzhou-transcript/
+├── subscriptions.json   # 订阅播客列表
+└── state.json           # 增量同步状态（自动管理）
+```
+
+### subscriptions.json
 
 ```json
 {
@@ -27,13 +33,7 @@
 }
 ```
 
-`knowledge_base_id` 可省略，会自动使用 IMA credential 对应的默认知识库。
-
-### 状态文件
-
-路径：`~/.openclaw/workspace-content/xiaoyuzhou_sync/last_check.json`
-
-记录每个播客最新同步的 episode_id，每次 sync 时自动更新。
+`knowledge_base_id` 可省略，使用 IMA credential 对应的默认知识库。
 
 ### IMA 凭证
 
@@ -42,21 +42,21 @@
 ## 手动运行
 
 ```bash
-# 单期
+# 增量同步
+python3 scripts/sync.py
+
+# 单期节目
 python3 scripts/fetch_transcript.py https://www.xiaoyuzhoufm.com/episode/xxx
 
-# 全部（播客主页）
+# 全部节目（播客主页）
 python3 scripts/fetch_transcript.py https://www.xiaoyuzhoufm.com/podcast/xxx --all
-
-# 增量同步（定时任务）
-python3 scripts/sync.py
 ```
 
 ## 定时任务
 
 - cron expression: `0 9 * * 6`（每周六 09:00 Asia/Shanghai）
 - cron id: `b0d3f7f7-56e5-4f86-811a-1eab40f2898c`
-- OpenClaw 会自动 announce 结果到飞书
+- OpenClaw 自动 announce 结果到飞书
 
 手动触发：
 ```bash
@@ -68,9 +68,8 @@ openclaw cron run b0d3f7f7-56e5-4f86-811a-1eab40f2898c
 openclaw cron runs --id b0d3f7f7-56e5-4f86-811a-1eab40f2898c
 ```
 
-## 更新 skill 后重新推送
+## 更新后推送
 
 ```bash
-cd ~/.openclaw/skills/xiaoyuzhou-transcript
 git add -A && git commit -m "update" && git push
 ```
