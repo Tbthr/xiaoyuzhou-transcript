@@ -12,22 +12,7 @@ description: >
 
 从小宇宙获取播客逐字稿并上传到 IMA 知识库。
 
-## 工作流程
-
-```
-小宇宙页面 → 解析 episode_id → 提取有知有行逐字稿链接
-    → r.jina.ai / defuddle.md 获取内容
-    → 上传到 IMA 知识库（使用 ima-skill）
-    → 更新本地 latest_episode_id 记录
-```
-
-## 定时任务
-
-- 触发：`cron 0 9 * * 6`（每周六 09:00 Asia/Shanghai）
-- 脚本：`~/.openclaw/workspace-content/xiaoyuzhou_sync/sync.py`
-- 配置：`~/.openclaw/workspace-content/xiaoyuzhou_subscriptions.json`
-
-## 核心脚本
+## 脚本说明
 
 ### `scripts/fetch_transcript.py`
 
@@ -41,12 +26,27 @@ python3 scripts/fetch_transcript.py <episode_url> [--output-dir <dir>]
 python3 scripts/fetch_transcript.py <podcast_url> --all [--output-dir <dir>]
 ```
 
+### `scripts/sync.py`
+
+增量同步脚本，对比本地记录的 latest_episode_id 与小宇宙最新节目，只上传新增期：
+
+```bash
+python3 scripts/sync.py
+```
+
+依赖 `~/.openclaw/workspace-content/xiaoyuzhou_subscriptions.json` 配置订阅列表。
+
+## 定时任务
+
+每周六 09:00（Asia/Shanghai），cron id：`b0d3f7f7-56e5-4f86-811a-1eab40f2898c`
+
 ## 依赖 Skills
 
 - `markdown-proxy` 或 `defuddle` — URL → Markdown 内容获取
-- `ima-skill` — IMA 知识库上传
+- `ima-skill` — IMA 知识库上传（需要 cos-upload.cjs）
 
 ## 参考资料
 
 - `references/podcast_sources.md` — 播客源说明和 URL 格式
 - `references/transcript_flow.md` — 详细抓取流程和降级策略
+- `README.md` — 配置说明（订阅列表格式、状态文件路径）
