@@ -13,7 +13,22 @@ DEFAULT_OUTPUT_DIR = os.path.expanduser("~/podcast_transcripts")
 
 def fetch_url(url):
     """通过 markdown-proxy 级联获取 URL 内容（返回 Markdown）。"""
-    # 优先 r.jina.ai
+    # 优先 defuddle.md
+    try:
+        r = subprocess.run(
+            ["curl", "-sL", f"https://defuddle.md/{url}",
+             "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
+            capture_output=True, text=True, timeout=30
+        )
+        content = clean_defuddle(r.stdout)
+        if len(content) > 500:
+            return content
+    except:
+        pass
+
+    time.sleep(1)
+
+    # 备用 r.jina.ai
     try:
         r = subprocess.run(
             ["curl", "-sL", f"https://r.jina.ai/{url}",
@@ -22,21 +37,6 @@ def fetch_url(url):
             capture_output=True, text=True, timeout=30
         )
         content = clean_jina(r.stdout)
-        if len(content) > 500:
-            return content
-    except:
-        pass
-
-    time.sleep(1)
-
-    # 备用 defuddle.md
-    try:
-        r = subprocess.run(
-            ["curl", "-sL", f"https://defuddle.md/{url}",
-             "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
-            capture_output=True, text=True, timeout=30
-        )
-        content = clean_defuddle(r.stdout)
         if len(content) > 500:
             return content
     except:
